@@ -23,16 +23,35 @@
           program
           (assoc program location val))))))
 
+(defn run [tokens]
+  (do
+    (reset! exited? false)
+    (reduce (fn [program modifier] (modifier program))
+            (into [] tokens)
+            (map parse-intcode (partition 4 tokens)))))
+
 (defn solution-1
   ([program-string]
-   (let [tokens (tokenize program-string)]
-    (do
-      (reset! exited? false)
-      (reduce (fn [program modifier] (modifier program))
-              (into [] tokens)
-              (map parse-intcode (partition 4 tokens))))))
+   (-> program-string
+       tokenize
+       run))
   ([]
    (solution-1 input)))
+
+(defn generate-trial-program [program a b]
+  (concat [(first program) a b] (drop 3 program)))
+
+(def test-val 19690720)
+
+(defn solution-2 []
+  (let [tokens (tokenize real-input)
+        check-list (for [noun (range 100)
+                         verb (range 100)
+                         :let [program (generate-trial-program tokens noun verb)]]
+                     [(first (run program)) noun verb])]
+    (let [[[_ noun verb]] (filter (fn [[val _ _]] (= test-val val)) check-list)]
+      (+ (* 100 noun)
+         verb))))
 
 (comment
 
