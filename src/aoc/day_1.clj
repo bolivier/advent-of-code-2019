@@ -35,5 +35,5 @@
 
 (defn solution-2 []
   (->> data
-       (map total-fuel-requirements-module)
+       (map mass->total-fuel)
        (apply +)))

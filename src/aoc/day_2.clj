@@ -34,17 +34,15 @@
   ([program-string]
    (-> program-string
        tokenize
-       run))
-  ([]
-   (solution-1 input)))
+       run)))
 
 (defn generate-trial-program [program a b]
   (concat [(first program) a b] (drop 3 program)))
 
 (def test-val 19690720)
 
-(defn solution-2 []
-  (let [tokens (tokenize real-input)
+(defn solution-2 [input]
+  (let [tokens (tokenize input)
         check-list (for [noun (range 100)
                          verb (range 100)
                          :let [program (generate-trial-program tokens noun verb)]]
