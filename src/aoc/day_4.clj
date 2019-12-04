@@ -1,6 +1,5 @@
 (ns aoc.day-4
-  (:require [clojure.spec.alpha :as s]
-            [clojure.string :refer [split]]))
+  (:require [clojure.string :refer [split]]))
 
 (defn some? [pred coll]
   (boolean (some pred coll)))
@@ -39,6 +38,9 @@
            [six-digit?
             two-adjacent-same?
             monotonically-increasing?])))
+
+(def puzzle-range-start 236491)
+(def puzzle-range-end 713787)
 
 (defn solution-1 []
   (->> (range puzzle-range-start puzzle-range-end)
