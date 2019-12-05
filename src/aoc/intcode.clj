@@ -51,19 +51,21 @@
         intcode (subvec program pc (+ size pc))]
     intcode))
 
+(defn get-op-fn [instruction]
+  (cond
+    (= 99 instruction) exit
+    (= 1 instruction) +
+    (= 2 instruction) *
+    (= 3 instruction) get-input
+    :else identity))
+
 (defn execute-intcode
   "Returns a fn that takes a program and performs the intcode on it."
   [intcode]
   (let [[raw-opcode & params] intcode
         {:keys [instruction
                 parameter-modes]} (parse-opcode raw-opcode)
-        op
-        (cond
-          (= 99 instruction) exit
-          (= 1 instruction) +
-          (= 2 instruction) *
-          (= 3 instruction) get-input
-          :else identity)]
+        op (get-op-fn instruction)]
 
     (fn [program]
       (let [val (apply op
