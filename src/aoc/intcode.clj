@@ -40,7 +40,7 @@
 
 (def get-input (constantly 1))
 
-(defn change-in-pc [opcode]
+(defn intcode-size [opcode]
   (let [{:keys [instruction]} (parse-opcode opcode)]
     (cond
       (or (= 2 instruction)
@@ -49,9 +49,20 @@
           (= 4 instruction)) 2
       (= 99 instruction) 1)))
 
+(declare jump?)
+(defn get-new-pc [intcode pc]
+  (let [[opcode & params] intcode]
+   (if (jump? opcode)
+     ;; This isn't going to remain correct for when there are two different
+     ;; kinds of jump codes
+     (if (zero? (first params))
+       (second params)
+       pc)
+     (+ pc (intcode-size opcode)))))
+
 (defn parse-intcode [pc program]
   (let [opcode (nth program pc)
-        size (change-in-pc (:instruction (parse-opcode opcode)))
+        size (intcode-size (:instruction (parse-opcode opcode)))
         intcode (subvec program pc (+ size pc))]
     intcode))
 
@@ -68,8 +79,10 @@
     :else identity))
 
 (defn io? [instruction]
-  (or (= 3 instruction)
-      (= 4 instruction)))
+  (boolean (#{3 4} instruction)))
+
+(defn jump? [instruction]
+  (boolean (#{5 6} instruction)))
 
 (defn execute-intcode
   "Returns a fn that takes a program and performs the intcode on it."
@@ -85,7 +98,9 @@
                                      params
                                      parameter-modes
                                      (repeat program)))))]
-    (if (or @exited? (= 4 instruction))
+    (if (or @exited?
+            (= 4 instruction)
+            (jump? instruction))
       program
       (assoc program location val))))
 
@@ -97,10 +112,10 @@
          pc 0]
     (if @exited?
       program
-      (let [pc-inc (change-in-pc (nth program pc))
-            intcode (parse-intcode pc program)]
+      (let [intcode (parse-intcode pc program)
+            new-pc (get-new-pc intcode pc)]
         (recur (execute-intcode intcode program)
-               (+ pc pc-inc)))))
+               new-pc))))
   (last @program-output))
 
 (s/fdef run

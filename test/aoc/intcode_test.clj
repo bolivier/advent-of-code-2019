@@ -1,5 +1,10 @@
 (ns aoc.intcode-test
-  (:require [aoc.intcode :refer [execute-intcode parse-intcode parse-opcode run change-in-pc]]
+  (:require [aoc.intcode :refer [execute-intcode
+                                 parse-intcode
+                                 parse-opcode
+                                 run
+                                 change-in-pc
+                                 get-new-pc]]
             [midje.sweet :refer :all]))
 
 (fact "the opcode 1002 is parsed correctly"
@@ -14,3 +19,11 @@
 
 (fact "outputting should not change the program"
       (execute-intcode [4 3] [4 3 99]) => [4 3 99])
+
+(every?
+ identity
+ (for [[intcode pc] [[[1201 2 3 3] 4]
+                     [[5 1 5] 0]
+                     [[5 0 5] 5]]]
+   (fact (str "intcode (" intcode ") increments the pc by " pc)
+         (get-new-pc intcode 0) => pc)))
