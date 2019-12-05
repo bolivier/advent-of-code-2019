@@ -1,34 +1,9 @@
-(ns aoc.day-2)
+(ns aoc.day-2
+  (:require [aoc.intcode :refer [run]]))
 
 (defn tokenize [input]
   (map #(Integer/parseInt %) (clojure.string/split input #",")))
 
-(def exited? (atom false))
-
-(defn exit [_ _]
-  (reset! exited? true))
-
-(defn parse-intcode
-  "Returns a fn that takes a program and performs the intcode on it."
-  [intcode]
-  (let [[opcode a b location] intcode
-        op (cond
-             (= 99 opcode) exit
-             (= 1 opcode) +
-             (= 2 opcode) *
-             :else nil)]
-    (fn [program]
-      (let [val (op (nth program a nil) (nth program b nil))]
-        (if @exited?
-          program
-          (assoc program location val))))))
-
-(defn run [tokens]
-  (do
-    (reset! exited? false)
-    (reduce (fn [program modifier] (modifier program))
-            (into [] tokens)
-            (map parse-intcode (partition 4 tokens)))))
 
 (defn solution-1
   ([program-string]
@@ -46,10 +21,10 @@
         check-list (for [noun (range 100)
                          verb (range 100)
                          :let [program (generate-trial-program tokens noun verb)]]
-                     [(first (run program)) noun verb])]
-    (let [[[_ noun verb]] (filter (fn [[val _ _]] (= test-val val)) check-list)]
-      (+ (* 100 noun)
-         verb))))
+                     [(first (run program)) noun verb])
+        [[_ noun verb]] (filter (fn [[val _ _]] (= test-val val)) check-list)]
+    (+ (* 100 noun)
+       verb)))
 
 (comment
 
