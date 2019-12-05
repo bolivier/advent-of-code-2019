@@ -7,7 +7,7 @@
 (defonce position-mode 0)
 (defonce immediate-mode 1)
 
-(defn exit [_ _]
+(defn exit [& _]
   (reset! exited? true))
 
 (def operations {1 +
@@ -34,17 +34,36 @@
     parameter
     (get program parameter)))
 
-(defn parse-intcode
+(def get-input (constantly 1))
+
+(defn change-in-pc [opcode]
+  (let [{:keys [instruction]} (parse-opcode opcode)]
+    (cond
+      (or (= 2 instruction)
+          (= 1 instruction)) 4
+      (or (= 3 instruction)
+          (= 4 instruction)) 2
+      (= 99 instruction) 1)))
+
+(defn parse-intcode [pc program]
+  (let [opcode (nth program pc)
+        size (change-in-pc opcode)
+        intcode (subvec program pc (+ size pc))]
+    intcode))
+
+(defn execute-intcode
   "Returns a fn that takes a program and performs the intcode on it."
   [intcode]
   (let [[raw-opcode & params] intcode
         {:keys [instruction
                 parameter-modes]} (parse-opcode raw-opcode)
-        op (cond
-             (= 99 instruction) exit
-             (= 1 instruction) +
-             (= 2 instruction) *
-             :else nil)]
+        op
+        (cond
+          (= 99 instruction) exit
+          (= 1 instruction) +
+          (= 2 instruction) *
+          (= 3 instruction) get-input
+          :else identity)]
 
     (fn [program]
       (let [val (apply op
@@ -62,8 +81,19 @@
 (s/def ::token int?)
 (defn run [tokens]
   (reset! exited? false)
-  (reduce (fn [program modifier] (modifier program))
-          (into [] tokens)
-          (map parse-intcode (partition 4 tokens))))
+  (loop [program tokens
+         pc 0]
+    (if @exited?
+      program
+      (let [pc-inc (change-in-pc (nth program pc))
+            intcode (parse-intcode pc program)]
+        (recur ((execute-intcode intcode) program)
+               (+ pc pc-inc))))))
 (s/fdef run
   :args (s/cat :tokens (s/coll-of ::token)))
+
+(comment
+  (def tokens (into [] (aoc.day-2/tokenize "1002,4,3,4,33")))
+  (def program (into [] tokens))
+  (def intcode (parse-intcode 0 program))
+  )
