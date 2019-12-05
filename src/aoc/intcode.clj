@@ -5,8 +5,6 @@
 (defn tokenize [input]
   (map #(Integer/parseInt %) (clojure.string/split input #",")))
 
-(def input (into [] (tokenize (slurp "resources/day_5.input"))))
-
 (def exited? (atom false))
 (def program-output (atom []))
 
@@ -102,13 +100,12 @@
       (let [pc-inc (change-in-pc (nth program pc))
             intcode (parse-intcode pc program)]
         (recur (execute-intcode intcode program)
-               (+ pc pc-inc))))))
+               (+ pc pc-inc)))))
+  (last @program-output))
 
 (s/fdef run
   :args (s/cat :tokens (s/coll-of ::token)))
 
 (comment
   (def tokens (into [] (aoc.day-2/tokenize "1002,4,3,4,33")))
-  (def program input)
-  (def intcode (subvec program 2 6))
   )
