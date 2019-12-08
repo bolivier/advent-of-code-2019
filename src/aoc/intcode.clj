@@ -1,5 +1,6 @@
 (ns aoc.intcode
   (:require [aoc.utils :refer [parse-int]]
+            [clojure.core.async :as async :refer [<! >! >!! <!!]]
             [clojure.spec.alpha :as s]))
 
 (defn tokenize [input]
@@ -40,49 +41,60 @@
 
 (def get-input (constantly 1))
 
-(defn intcode-size [opcode]
-  (let [{:keys [instruction]} (parse-opcode opcode)]
-    (cond
-      (or (= 2 instruction)
-          (= 1 instruction)) 4
-      (or (= 3 instruction)
-          (= 4 instruction)) 2
-      (= 99 instruction) 1)))
-
-(declare jump?)
-(defn get-new-pc [intcode pc]
-  (let [[opcode & params] intcode]
-   (if (jump? opcode)
-     ;; This isn't going to remain correct for when there are two different
-     ;; kinds of jump codes
-     (if (zero? (first params))
-       (second params)
-       pc)
-     (+ pc (intcode-size opcode)))))
+(defmulti get-new-pc (fn [intcode _]
+                       (:instruction (parse-opcode (first intcode)))))
+(defmethod get-new-pc 5 [[_ & params] pc]
+  (if (zero? (first params))
+    (second params)
+    pc))
+(defmethod get-new-pc 6 [[_ & params] pc]
+  (if (zero? (first params))
+    pc
+    (second params)))
+(defmethod get-new-pc 1 [_ pc] (+ pc 4))
+(defmethod get-new-pc 2 [_ pc] (+ pc 4))
+(defmethod get-new-pc 3 [_ pc] (+ pc 2))
+(defmethod get-new-pc 4 [_ pc] (+ pc 2))
+(defmethod get-new-pc 99 [_ _] (+ pc 1))
 
 (defn parse-intcode [pc program]
-  (let [opcode (nth program pc)
-        size (intcode-size (:instruction (parse-opcode opcode)))
-        intcode (subvec program pc (+ size pc))]
-    intcode))
+  (let [opcode (nth program pc)]
+    (mapv #(get program %)
+          (range pc (get-new-pc [opcode] pc)))))
 
 (defn output [n & _]
   (swap! program-output conj n))
 
+(defn less-than [a b]
+  (if (< a b)
+    1
+    0))
+
+(defn equals [a b]
+  (if (= a b)
+    1
+    0))
+
+(defn no-op [& _]
+  nil)
+
 (defn get-op-fn [instruction]
-  (cond
-    (= 99 instruction) exit
-    (= 1 instruction) +
-    (= 2 instruction) *
-    (= 3 instruction) get-input
-    (= 4 instruction) output
-    :else identity))
+  (case instruction
+    99 exit
+    1 +
+    2 *
+    3 get-input
+    4 output
+    
+    5 no-op
+    6 no-op
+    
+    7 less-than
+    8 equals
+    (throw (Exception. (str "Used unsupported opcode: " instruction)))))
 
-(defn io? [instruction]
-  (boolean (#{3 4} instruction)))
-
-(defn jump? [instruction]
-  (boolean (#{5 6} instruction)))
+(defn side-effect? [instruction]
+  (#{3 4 5 6} instruction))
 
 (defn execute-intcode
   "Returns a fn that takes a program and performs the intcode on it."
@@ -98,9 +110,7 @@
                                      params
                                      parameter-modes
                                      (repeat program)))))]
-    (if (or @exited?
-            (= 4 instruction)
-            (jump? instruction))
+    (if (or @exited? (side-effect? instruction))
       program
       (assoc program location val))))
 
