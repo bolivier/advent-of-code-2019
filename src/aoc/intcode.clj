@@ -1,10 +1,9 @@
 (ns aoc.intcode
   (:require [aoc.utils :refer [parse-int]]
-            [clojure.core.async :as async :refer [<! >! >!! <!!]]
             [clojure.spec.alpha :as s]))
 
 (defn tokenize [input]
-  (map #(Integer/parseInt %) (clojure.string/split input #",")))
+  (mapv #(Integer/parseInt %) (clojure.string/split input #",")))
 
 (def exited? (atom false))
 (def program-output (atom []))
@@ -15,10 +14,22 @@
 (defn exit [& _]
   (reset! exited? true))
 
-(def operations {1 +
-                 2 *})
+(def pc-change {1 4
+                2 4
+                3 2
+                4 2
+                5 3
+                6 3
+                7 4
+                8 4
+                99 1})
+
+(def jump-instructions #{5 6})
 
 (s/def ::opcode (s/and int? #(< 999 % 9999)))
+
+(defn valid-instruction? [instruction]
+  (contains? pc-change instruction))
 
 (defn parse-opcode [opcode]
   (let [s (seq (format "%05d" opcode))
@@ -27,40 +38,78 @@
                          reverse
                          (clojure.string/join "")
                          Integer/parseInt)]
-    {:instruction instruction
-     :parameter-modes  (mapv
-                        (comp parse-int str)
-                        parameter-modes)}))
+    (if (not (valid-instruction? instruction))
+      (throw (Exception. (str "Used an invalid instruction " instruction)))
+      {:instruction instruction
+       :parameter-modes  (mapv
+                          (comp parse-int str)
+                          parameter-modes)})))
 (s/fdef parse-opcode
   :args (s/cat :opcode ::opcode))
 
-(defn get-program-val [parameter mode program]
-  (if (= mode immediate-mode)
-    parameter
-    (get program parameter)))
-
 (def get-input (constantly 1))
 
-(defmulti get-new-pc (fn [intcode _]
-                       (:instruction (parse-opcode (first intcode)))))
-(defmethod get-new-pc 5 [[_ & params] pc]
-  (if (zero? (first params))
-    (second params)
-    pc))
-(defmethod get-new-pc 6 [[_ & params] pc]
-  (if (zero? (first params))
-    pc
-    (second params)))
-(defmethod get-new-pc 1 [_ pc] (+ pc 4))
-(defmethod get-new-pc 2 [_ pc] (+ pc 4))
-(defmethod get-new-pc 3 [_ pc] (+ pc 2))
-(defmethod get-new-pc 4 [_ pc] (+ pc 2))
-(defmethod get-new-pc 99 [_ _] (+ pc 1))
+(s/def ::intcode (s/and (s/every int?)
+                        #(< 0 (count %) 4)))
+
+(defn get-param-value-with-mode [param mode program]
+  (cond
+    (= 1 mode) param
+    (= 0 mode) (get program param)
+    :else (throw (Exception. (str "Given bad values to get in program: " [param mode])))))
+
+(defmulti get-new-pc-from-jump (fn [_ {:keys [instruction]} _ _]
+                                 instruction))
+(defmethod get-new-pc-from-jump 5 [pc
+                                   {:keys [parameter-modes]}
+                                   params
+                                   program]
+  ;; this guy is getting stuck at index 6.
+  ;; the opcode at input six is saying that the new pc
+  ;; should also be 6....so it loop infinitely.
+  (if (zero? (get-param-value-with-mode
+              (first params)
+              (first parameter-modes)
+              program))
+    (+ pc
+       (pc-change pc))
+    (get-param-value-with-mode
+     (second params)
+     (second parameter-modes)
+     program)))
+
+(defmethod get-new-pc-from-jump 6 [pc
+                                   {:keys [parameter-modes]}
+                                   params
+                                   program]
+  (if (zero? (get-param-value-with-mode
+              (first params)
+              (first parameter-modes)
+              program))
+    (get-param-value-with-mode
+     (second params)
+     (second parameter-modes)
+     program)
+    (+ pc
+       (pc-change pc))))
+
+(defn get-new-pc [intcode pc program]
+  (let [parsed-intcode (parse-opcode (first intcode))
+        instruction (:instruction parsed-intcode)]
+    (if (jump-instructions instruction)
+      (get-new-pc-from-jump
+       pc
+       parsed-intcode
+       (rest intcode)
+       program)
+      (+ pc (pc-change instruction)))))
 
 (defn parse-intcode [pc program]
-  (let [opcode (nth program pc)]
+  (let [opcode (nth program pc)
+        instruction (:instruction (parse-opcode opcode))]
     (mapv #(get program %)
-          (range pc (get-new-pc [opcode] pc)))))
+          (range pc (+ pc
+                       (pc-change instruction))))))
 
 (defn output [n & _]
   (swap! program-output conj n))
@@ -85,16 +134,16 @@
     2 *
     3 get-input
     4 output
-    
+
     5 no-op
     6 no-op
-    
+
     7 less-than
     8 equals
-    (throw (Exception. (str "Used unsupported opcode: " instruction)))))
+    #_(throw (Exception. (str "Used unsupported opcode: " instruction)))))
 
 (defn side-effect? [instruction]
-  (#{3 4 5 6} instruction))
+  (#{4 5 6} instruction))
 
 (defn execute-intcode
   "Returns a fn that takes a program and performs the intcode on it."
@@ -105,7 +154,7 @@
         op (get-op-fn instruction)
         location (last params)
         val (apply op
-                   (take 2 (map #(apply get-program-val %)
+                   (take 2 (map #(apply get-param-value-with-mode %)
                                 (map vector
                                      params
                                      parameter-modes
@@ -120,17 +169,23 @@
   (reset! program-output [])
   (loop [program tokens
          pc 0]
-    (if @exited?
+    (if (or @exited?
+            (< (count program) pc))
       program
       (let [intcode (parse-intcode pc program)
-            new-pc (get-new-pc intcode pc)]
+            new-pc (get-new-pc intcode pc program)]
         (recur (execute-intcode intcode program)
                new-pc))))
-  (last @program-output))
+  @program-output)
 
 (s/fdef run
   :args (s/cat :tokens (s/coll-of ::token)))
 
 (comment
   (def tokens (into [] (aoc.day-2/tokenize "1002,4,3,4,33")))
+
+
+  (run (tokenize "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"))
+
+  (def tokens (tokenize (slurp "resources/day_5.input")))
   )

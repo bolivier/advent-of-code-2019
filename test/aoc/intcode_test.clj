@@ -12,15 +12,10 @@
 (fact "outputting should not change the program"
       (execute-intcode [4 3] [4 3 99]) => [4 3 99])
 
-(every?
- identity
- (for [[intcode pc] [[[1201 2 3 3] 4]
-                     [[5 1 5] 0]
-                     [[5 0 5] 5]
-                     [[6 1 5] 5]
-                     [[6 0 5] 0]]]
-   (fact (str "intcode (" intcode ") increments the pc by " pc)
-         (get-new-pc intcode 0) => pc)))
+
+(facts "param fetching w/ mode"
+       (fact "fetching with immediate mode should return the param"
+             (get-param-value-with-mode 2 1 [3 4 5 6]) => 2))
 
 (facts "Opcode 7"
        (fact "Opcode 7 stores 1 in 5 when (< second first"
@@ -29,3 +24,6 @@
 (facts "Opcode 8"
        (fact "Opcode 8 stores 1 in 5 when (= second first)"
              (execute-intcode [8 1 1 3] [5 1 1 3]) => [5 1 1 1]))
+
+(fact "This program outputs 999 for inputs < 8, 1000 if == 8, 1001 otherwise"
+      (run (tokenize "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99")) => [999])
