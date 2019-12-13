@@ -5,3 +5,6 @@
 
 (defn solution-1 []
   (run input))
+
+(defn solution-2 []
+  (run input))

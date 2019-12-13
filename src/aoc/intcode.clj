@@ -47,7 +47,8 @@
 (s/fdef parse-opcode
   :args (s/cat :opcode ::opcode))
 
-(def get-input (constantly 1))
+;; This needs to be refactored to support variadic input.
+(def get-input (constantly 5))
 
 (s/def ::intcode (s/and (s/every int?)
                         #(< 0 (count %) 4)))
@@ -61,25 +62,22 @@
 (defmulti get-new-pc-from-jump (fn [_ {:keys [instruction]} _ _]
                                  instruction))
 (defmethod get-new-pc-from-jump 5 [pc
-                                   {:keys [parameter-modes]}
+                                   {:keys [instruction parameter-modes]}
                                    params
                                    program]
-  ;; this guy is getting stuck at index 6.
-  ;; the opcode at input six is saying that the new pc
-  ;; should also be 6....so it loop infinitely.
   (if (zero? (get-param-value-with-mode
               (first params)
               (first parameter-modes)
               program))
     (+ pc
-       (pc-change pc))
+       (pc-change instruction))
     (get-param-value-with-mode
      (second params)
      (second parameter-modes)
      program)))
 
 (defmethod get-new-pc-from-jump 6 [pc
-                                   {:keys [parameter-modes]}
+                                   {:keys [instruction parameter-modes]}
                                    params
                                    program]
   (if (zero? (get-param-value-with-mode
@@ -91,7 +89,7 @@
      (second parameter-modes)
      program)
     (+ pc
-       (pc-change pc))))
+       (pc-change instruction))))
 
 (defn get-new-pc [intcode pc program]
   (let [parsed-intcode (parse-opcode (first intcode))
@@ -188,4 +186,7 @@
   (run (tokenize "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"))
 
   (def tokens (tokenize (slurp "resources/day_5.input")))
+
+  (run tokens)
+
   )
