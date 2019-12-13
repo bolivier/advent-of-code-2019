@@ -1,6 +1,7 @@
 (ns aoc.intcode
   (:require [aoc.utils :refer [parse-int]]
-            [clojure.spec.alpha :as s]))
+            [clojure.spec.alpha :as s]
+            [clojure.core.async :refer [>! <! >!! <!! go chan]]))
 
 (defn tokenize [input]
   (mapv #(Integer/parseInt %) (clojure.string/split input #",")))
@@ -162,18 +163,22 @@
       (assoc program location val))))
 
 (s/def ::token int?)
-(defn run [tokens]
-  (reset! exited? false)
-  (reset! program-output [])
-  (loop [program tokens
-         pc 0]
-    (if (or @exited?
-            (< (count program) pc))
-      program
-      (let [intcode (parse-intcode pc program)
-            new-pc (get-new-pc intcode pc program)]
-        (recur (execute-intcode intcode program)
-               new-pc))))
+(s/def ::program-input (s/coll-of ::token))
+(s/def ::program-output (s/coll-of ::token))
+(defn run
+  ([tokens] (run tokens []))
+  ([tokens inputs]
+   (reset! exited? false)
+   (reset! program-output [])
+   (loop [program tokens
+          pc 0]
+     (if (or @exited?
+             (< (count program) pc))
+       program
+       (let [intcode (parse-intcode pc program)
+             new-pc (get-new-pc intcode pc program)]
+         (recur (execute-intcode intcode program)
+                new-pc)))))
   @program-output)
 
 (s/fdef run
@@ -189,4 +194,14 @@
 
   (run tokens)
 
+  ;; channel
+  ;; that has some buffered stuff on it
+  ;; that will query a user when that stuff runs out
+
+  (defn std-in [data]
+    (let [c (chan)]
+      (do
+        (go (doseq [x data]
+              (>!! c x)))
+        c)))
   )
