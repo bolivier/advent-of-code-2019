@@ -31,19 +31,20 @@
 (defn valid-instruction? [instruction]
   (contains? pc-change instruction))
 
-(defn parse-opcode [opcode]
-  (let [s (seq (format "%05d" opcode))
-        [backwards-code parameter-modes] (split-at 2 (reverse s))
-        instruction (->> backwards-code
-                         reverse
-                         (clojure.string/join "")
-                         Integer/parseInt)]
+(defn parse-opcode
+  "opcodes are 5 digit integers that represent the parameter modes plus the operation itself.
+
+  They are 'little endian' for the operation - it's the 10's place"
+  [opcode]
+  (let [instruction (mod opcode 100)
+        parameter-mode-code (quot opcode 100)]
     (if (not (valid-instruction? instruction))
       (throw (Exception. (str "Used an invalid instruction " instruction)))
       {:instruction instruction
-       :parameter-modes  (mapv
-                          (comp parse-int str)
-                          parameter-modes)})))
+       :parameter-modes (->> parameter-mode-code
+                             (iterate #(int (/ % 10)))
+                             (take 3)
+                             (mapv #(mod % 10)))})))
 (s/fdef parse-opcode
   :args (s/cat :opcode ::opcode))
 
