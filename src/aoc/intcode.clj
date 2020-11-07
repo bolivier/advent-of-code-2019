@@ -201,12 +201,22 @@
          pc 0]
     (if (or @exited?
             (< (count program) pc))
-      program
+      {:intcode/output @program-output
+       :intcode/memory program
+       :intcode/input []
+       :intcode/pc pc}
       (let [intcode (parse-intcode pc program)
             new-pc (get-new-pc intcode pc program)]
         (recur (execute-intcode intcode program)
-               new-pc))))
-  @program-output)
+               new-pc)))))
+
+(comment
+  (def computer {:intcode/exited? false
+                 :intcode/pc 0
+                 :intcode/memory [1 40 99]
+                 :intcode/output [""]
+                 :intcode/input []})
+  nil)
 
 (s/fdef run
   :args (s/cat :tokens (s/coll-of ::token)))
@@ -214,11 +224,8 @@
 (comment
   (def tokens (into [] (aoc.day-2/tokenize "1002,4,3,4,33")))
 
-
   (run (tokenize "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"))
 
   (def tokens (tokenize (slurp "resources/day_5.input")))
 
-  (run tokens)
-
-  )
+  (run tokens))
