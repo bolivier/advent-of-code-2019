@@ -24,7 +24,7 @@
                 8 4
                 99 1})
 
-(def jump-instructions #{5 6})
+(def jump-instruction? #{5 6})
 
 (s/def ::opcode (s/and int? #(< 999 % 9999)))
 
@@ -92,16 +92,6 @@
     (+ pc
        (pc-change instruction))))
 
-(defn get-new-pc [intcode pc program]
-  (let [parsed-intcode (parse-opcode (first intcode))
-        instruction (:instruction parsed-intcode)]
-    (if (jump-instructions instruction)
-      (get-new-pc-from-jump pc
-                            parsed-intcode
-                            (rest intcode)
-                            program)
-      (+ pc (pc-change instruction)))))
-
 (defn parse-intcode
   "Grab multi digit 'intcode'"
   [pc program]
@@ -161,14 +151,17 @@
 (defn tick-computer [computer]
   (let [{:keys [intcode/pc intcode/memory]} computer
         intcode (parse-intcode pc memory)
-        new-pc (get-new-pc intcode pc memory)]
+        params (rest intcode)
+        parsed-opcode (parse-opcode (first intcode))
+        {:keys [instruction parameter-modes]} parsed-opcode]
     (assoc computer
-           :intcode/pc new-pc
-           :intcode/memory (let [memory (:intcode/memory computer)
-                                 [raw-opcode & params] intcode
-                                 {:keys [instruction
-                                         parameter-modes]} (parse-opcode raw-opcode)
-                                 op (get-op-fn instruction)
+           :intcode/pc (if (jump-instruction? instruction)
+                         (get-new-pc-from-jump pc
+                                               parsed-opcode
+                                               (rest intcode)
+                                               memory)
+                         (+ pc (pc-change instruction)))
+           :intcode/memory (let [op (get-op-fn instruction)
                                  location (last params)
                                  val (op
                                       (get-param-value-with-mode (first params) (first parameter-modes) memory)
