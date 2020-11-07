@@ -96,14 +96,15 @@
   (let [parsed-intcode (parse-opcode (first intcode))
         instruction (:instruction parsed-intcode)]
     (if (jump-instructions instruction)
-      (get-new-pc-from-jump
-       pc
-       parsed-intcode
-       (rest intcode)
-       program)
+      (get-new-pc-from-jump pc
+                            parsed-intcode
+                            (rest intcode)
+                            program)
       (+ pc (pc-change instruction)))))
 
-(defn parse-intcode [pc program]
+(defn parse-intcode
+  "Grab multi digit 'intcode'"
+  [pc program]
   (let [opcode (nth program pc)
         instruction (:instruction (parse-opcode opcode))]
     (mapv #(get program %)
