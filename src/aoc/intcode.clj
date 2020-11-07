@@ -145,21 +145,6 @@
 (defn side-effect? [instruction]
   (#{4 5 6 99} instruction))
 
-(defn execute-computer-intcode
-  [intcode computer]
-  (let [memory (:intcode/memory computer)
-        [raw-opcode & params] intcode
-        {:keys [instruction
-                parameter-modes]} (parse-opcode raw-opcode)
-        op (get-op-fn instruction)
-        location (last params)
-        op-params [(get-param-value-with-mode (first params) (first parameter-modes) memory)
-                   (get-param-value-with-mode (second params) (second parameter-modes) memory)]
-        val (apply op op-params)]
-    (if (side-effect? instruction)
-      memory
-      (assoc memory location val))))
-
 (s/def ::token int?)
 
 (defn create-computer
@@ -176,11 +161,21 @@
 (defn tick-computer [computer]
   (let [{:keys [intcode/pc intcode/memory]} computer
         intcode (parse-intcode pc memory)
-        new-pc (get-new-pc intcode pc memory)
-        new-memory (execute-computer-intcode intcode computer)]
+        new-pc (get-new-pc intcode pc memory)]
     (assoc computer
            :intcode/pc new-pc
-           :intcode/memory new-memory)))
+           :intcode/memory (let [memory (:intcode/memory computer)
+                                 [raw-opcode & params] intcode
+                                 {:keys [instruction
+                                         parameter-modes]} (parse-opcode raw-opcode)
+                                 op (get-op-fn instruction)
+                                 location (last params)
+                                 val (op
+                                      (get-param-value-with-mode (first params) (first parameter-modes) memory)
+                                      (get-param-value-with-mode (second params) (second parameter-modes) memory))]
+                             (if (side-effect? instruction)
+                               memory
+                               (assoc memory location val))))))
 
 (defn run-computer [computer]
   (last (take-while
