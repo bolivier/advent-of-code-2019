@@ -148,6 +148,21 @@
 (defn current-opcode [{:keys [intcode/memory intcode/pc]}]
   (mod (get memory pc) 100))
 
+;; Create this crap to use a multimethod instead of a lookup table grab
+;; instruction and dispatch on it implement multimethods that will do the right
+;; thing with the right to the computer given the right computer.  That's the
+;; open-closed-principle.
+(defmethod execute-op-on-memory (fn [computer]))
+(def execute-op-on-memory [computer]
+  (let [op (get-op-fn instruction)
+        location (last params)
+        val (op
+             (get-param-value-with-mode (first params) (first parameter-modes) memory)
+             (get-param-value-with-mode (second params) (second parameter-modes) memory))]
+    (if (side-effect? instruction)
+      memory
+      (assoc memory location val))))
+
 (defn tick-computer [computer]
   (let [{:keys [intcode/pc intcode/memory]} computer
         intcode (parse-intcode pc memory)
@@ -161,14 +176,8 @@
                                                (rest intcode)
                                                memory)
                          (+ pc (pc-change instruction)))
-           :intcode/memory (let [op (get-op-fn instruction)
-                                 location (last params)
-                                 val (op
-                                      (get-param-value-with-mode (first params) (first parameter-modes) memory)
-                                      (get-param-value-with-mode (second params) (second parameter-modes) memory))]
-                             (if (side-effect? instruction)
-                               memory
-                               (assoc memory location val))))))
+           :intcode/memory (execute-op-on-memory computer)
+           :intcode/memory)))
 
 (defn run-computer [computer]
   (last (take-while
