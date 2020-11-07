@@ -143,7 +143,7 @@
     #_(throw (Exception. (str "Used unsupported opcode: " instruction)))))
 
 (defn side-effect? [instruction]
-  (#{4 5 6} instruction))
+  (#{4 5 6 99} instruction))
 
 (defn execute-intcode
   "Returns a fn that takes a program and performs the intcode on it."
