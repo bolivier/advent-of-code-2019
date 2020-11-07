@@ -19,20 +19,7 @@
 (deftest parsing-intcode
   (testing "grabbing the last program element"
     (is (= (sut/parse-intcode 4 [1201 3 4 3 99])
-           [99])))
-
-  (testing "Opcode 7 stores 1 in 5 when (< second first"
-    (is (= [7 1 2 1]
-           (sut/execute-intcode [7 1 2 3] [7 1 2 3]))))
-
-  (testing "Opcode 8 stores 1 in 5 when (= second first)"
-    (is (= [8 1 1 1]
-           (sut/execute-intcode [8 1 1 3] [8 1 1 3])))))
-
-(deftest output-test
-  (testing "output does not change memory"
-    (is (= [4 3 99]
-           (sut/execute-intcode [4 3] [4 3 99])))))
+           [99]))))
 
 (deftest immediate-mode-testing
   (testing "param fetching with immediate mode"

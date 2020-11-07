@@ -145,25 +145,20 @@
 (defn side-effect? [instruction]
   (#{4 5 6 99} instruction))
 
-(defn execute-intcode
-  "Returns a fn that takes a program and performs the intcode on it."
-  [intcode program]
-  (let [[raw-opcode & params] intcode
+(defn execute-computer-intcode
+  [intcode computer]
+  (let [memory (:intcode/memory computer)
+        [raw-opcode & params] intcode
         {:keys [instruction
                 parameter-modes]} (parse-opcode raw-opcode)
         op (get-op-fn instruction)
         location (last params)
-        param-mode-program-triples (map vector
-                                        params
-                                        parameter-modes
-                                        (repeat program))
-        op-params (take 2 (map
-                           #(apply get-param-value-with-mode %)
-                           param-mode-program-triples))
+        op-params [(get-param-value-with-mode (first params) (first parameter-modes) memory)
+                   (get-param-value-with-mode (second params) (second parameter-modes) memory)]
         val (apply op op-params)]
     (if (side-effect? instruction)
-      program
-      (assoc program location val))))
+      memory
+      (assoc memory location val))))
 
 (s/def ::token int?)
 
@@ -182,50 +177,13 @@
   (let [{:keys [intcode/pc intcode/memory]} computer
         intcode (parse-intcode pc memory)
         new-pc (get-new-pc intcode pc memory)
-        new-memory (execute-intcode intcode memory)]
-    (assoc
-     (assoc computer :intcode/pc new-pc)
-     :intcode/memory
-     new-memory)))
+        new-memory (execute-computer-intcode intcode computer)]
+    (assoc computer
+           :intcode/pc new-pc
+           :intcode/memory new-memory)))
 
 (defn run-computer [computer]
   (last (take-while
          #(and (< (:intcode/pc %) (count (:intcode/memory %)))
                (not= 99 (current-opcode computer)))
          (iterate tick-computer computer))))
-
-(defn run [tokens]
-  (reset! exited? false)
-  (reset! program-output [])
-  (loop [program tokens
-         pc 0]
-    (if (or @exited?
-            (< (count program) pc))
-      {:intcode/output @program-output
-       :intcode/memory program
-       :intcode/input []
-       :intcode/pc pc}
-      (let [intcode (parse-intcode pc program)
-            new-pc (get-new-pc intcode pc program)]
-        (recur (execute-intcode intcode program)
-               new-pc)))))
-
-(comment
-  (def computer {:intcode/exited? false
-                 :intcode/pc 0
-                 :intcode/memory [1 40 99]
-                 :intcode/output [""]
-                 :intcode/input []})
-  nil)
-
-(s/fdef run
-  :args (s/cat :tokens (s/coll-of ::token)))
-
-(comment
-  (def tokens (into [] (aoc.day-2/tokenize "1002,4,3,4,33")))
-
-  (run (tokenize "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"))
-
-  (def tokens (tokenize (slurp "resources/day_5.input")))
-
-  (run tokens))
