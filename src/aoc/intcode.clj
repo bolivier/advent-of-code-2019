@@ -54,10 +54,10 @@
 (s/def ::intcode (s/and (s/every int?)
                         #(< 0 (count %) 4)))
 
-(defn get-param-value-with-mode [param mode program]
+(defn get-param-value-with-mode [param mode memory]
   (cond
     (= 1 mode) param
-    (= 0 mode) (get program param)
+    (= 0 mode) (get memory param)
     :else (throw (Exception. (str "Given bad values to get in program: " [param mode])))))
 
 (defmulti get-new-pc-from-jump (fn [_ {:keys [instruction]} _ _]
