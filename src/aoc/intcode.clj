@@ -153,17 +153,47 @@
                 parameter-modes]} (parse-opcode raw-opcode)
         op (get-op-fn instruction)
         location (last params)
-        val (apply op
-                   (take 2 (map #(apply get-param-value-with-mode %)
-                                (map vector
-                                     params
-                                     parameter-modes
-                                     (repeat program)))))]
-    (if (or @exited? (side-effect? instruction))
+        param-mode-program-triples (map vector
+                                        params
+                                        parameter-modes
+                                        (repeat program))
+        op-params (take 2 (map
+                           #(apply get-param-value-with-mode %)
+                           param-mode-program-triples))
+        val (apply op op-params)]
+    (if (side-effect? instruction)
       program
       (assoc program location val))))
 
 (s/def ::token int?)
+
+(defn create-computer
+  ([memory] (create-computer memory []))
+  ([memory input]
+   {:intcode/memory (tokenize memory)
+    :intcode/input input
+    :intcode/output []
+    :intcode/pc 0}))
+
+(defn current-opcode [{:keys [intcode/memory intcode/pc]}]
+  (mod (get memory pc) 100))
+
+(defn tick-computer [computer]
+  (let [{:keys [intcode/pc intcode/memory]} computer
+        intcode (parse-intcode pc memory)
+        new-pc (get-new-pc intcode pc memory)
+        new-memory (execute-intcode intcode memory)]
+    (assoc
+     (assoc computer :intcode/pc new-pc)
+     :intcode/memory
+     new-memory)))
+
+(defn run-computer [computer]
+  (last (take-while
+         #(and (< (:intcode/pc %) (count (:intcode/memory %)))
+               (not= 99 (current-opcode computer)))
+         (iterate tick-computer computer))))
+
 (defn run [tokens]
   (reset! exited? false)
   (reset! program-output [])
