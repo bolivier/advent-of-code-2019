@@ -8,9 +8,6 @@
     (is (= {:instruction 2
             :param-modes [0 1 0]}
            (sut/parse-opcode 1002)))
-    (is (= {:instruction 8
-            :param-modes [0 1 1]}
-           (sut/parse-opcode 11008)))
 
     (is (= {:instruction 99
             :param-modes [0 1 0]}
@@ -46,7 +43,37 @@
       (is (map? final-computer))
       (is (:intcode/memory final-computer))
       (is (= [8 1 1 1 99]
-             (:intcode/memory final-computer))))))
+             (:intcode/memory final-computer)))))
+
+  (testing "addition (op code 1)"
+    (let [computer (sut/run-computer
+                    (sut/create-computer "1,1,1,2,99"))]
+      (is (= [1 1 2 2 99]
+             (:intcode/memory computer))))
+    (let [computer (sut/run-computer
+                    (sut/create-computer "1,5,6,2,99,4,5"))]
+      (is (= [1 5 9 2 99 4 5]
+             (:intcode/memory computer)))))
+
+  (testing "multiplication (op code 2)"
+    (let [computer (sut/run-computer
+                    (sut/create-computer "2,5,6,2,99,4,5"))]
+      (is (= [2 5 20 2 99 4 5]
+             (:intcode/memory computer)))))
+
+  (testing "input (op code 3)"
+    (let [computer (sut/run-computer
+                    (sut/create-computer "3,3,99,1" [20]))]
+      (is (= [3 3 99 20]
+             (:intcode/memory computer)))))
+
+  (testing "output (op code 4)"
+    (let [computer (sut/run-computer
+                    (sut/create-computer "4,3,99,20"))]
+      (is (= [4 3 99 20]
+             (:intcode/memory computer)))
+      (is (= [20]
+             (:intcode/output computer))))))
 
 (deftest previous-solutions
   (testing "day 2"
