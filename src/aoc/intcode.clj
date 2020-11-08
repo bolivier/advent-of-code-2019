@@ -5,7 +5,8 @@
 (defn tokenize [input]
   (mapv #(Integer/parseInt %) (str/split input #",")))
 
-(def pc-change {1 4
+(def pc-change {:arithmetic 4
+                1 4
                 2 4
                 3 2
                 4 2
@@ -99,28 +100,26 @@
 (defn current-opcode [{:keys [intcode/memory intcode/pc]}]
   (mod (get memory pc) 100))
 
+(defn execute-arithmetic-instruction [computer fn]
+  (let [instruction (parse-tick-instruction computer)
+        memory (:intcode/memory computer)
+        [param1 param2 memory-location] (:intcode/params instruction)
+        [mode1 mode2] (:intcode/param-modes instruction)
+
+        arg1 (get-param-value-with-mode param1 mode1 memory)
+        arg2 (get-param-value-with-mode param2 mode2 memory)
+
+        value (fn arg1 arg2)]
+    (-> computer
+        (assoc-in [:intcode/memory memory-location] value)
+        (update :intcode/pc (partial + (pc-change :arithmetic))))))
+
 (defmulti execute-instruction
   (fn [computer]
     (:intcode/instruction (parse-tick-instruction computer))))
 
 (defmethod execute-instruction 99 [computer]
   (update computer :intcode/pc inc))
-
-(defn execute-arithmetic-instruction [computer fn]
-  (let [instruction (parse-tick-instruction computer)
-        memory (:intcode/memory computer)
-        [param1 param2] (:intcode/params instruction)
-        [mode1 mode2] (:intcode/param-modes instruction)
-
-        arg1 (get-param-value-with-mode param1 mode1 memory)
-        arg2 (get-param-value-with-mode param2 mode2 memory)
-
-        memory-location (-> instruction :intcode/params (nth 2))
-
-        value (fn arg1 arg2)]
-    (-> computer
-        (assoc-in [:intcode/memory memory-location] value)
-        (update :intcode/pc (partial + 4)))))
 
 ;; It might be helpful to extract some data constants from these methods to help
 ;; define the instructions in data instead of in code.
@@ -137,14 +136,14 @@
     (-> computer
         (assoc-in [:intcode/memory memory-location] input-val)
         (update :intcode/input #(into [] (rest %)))
-        (update :intcode/pc (partial + 2)))))
+        (update :intcode/pc (partial + (pc-change 3))))))
 
 (defmethod execute-instruction 4 [computer]
   (let [instruction (parse-tick-instruction computer)
         memory-location (first (:intcode/params instruction))]
     (-> computer
         (update :intcode/output #(conj % (get-in computer [:intcode/memory memory-location])))
-        (update :intcode/pc (partial + 2)))))
+        (update :intcode/pc (partial + (pc-change 4))))))
 
 (defn tick-computer [computer]
   (execute-instruction computer))
