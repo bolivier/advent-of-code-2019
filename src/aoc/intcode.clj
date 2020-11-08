@@ -41,10 +41,10 @@
     (if (not (valid-instruction? instruction))
       (throw (Exception. (str "Used an invalid instruction " instruction)))
       {:instruction instruction
-       :parameter-modes (->> parameter-mode-code
-                             (iterate #(int (/ % 10)))
-                             (take 3)
-                             (mapv #(mod % 10)))})))
+       :param-modes (->> parameter-mode-code
+                         (iterate #(int (/ % 10)))
+                         (take 3)
+                         (mapv #(mod % 10)))})))
 (s/fdef parse-opcode
   :args (s/cat :opcode ::opcode))
 
@@ -63,34 +63,43 @@
 (defmulti get-new-pc-from-jump (fn [_ {:keys [instruction]} _ _]
                                  instruction))
 (defmethod get-new-pc-from-jump 5 [pc
-                                   {:keys [instruction parameter-modes]}
+                                   {:keys [instruction param-modes]}
                                    params
                                    program]
   (if (zero? (get-param-value-with-mode
               (first params)
-              (first parameter-modes)
+              (first param-modes)
               program))
     (+ pc
        (pc-change instruction))
     (get-param-value-with-mode
      (second params)
-     (second parameter-modes)
+     (second param-modes)
      program)))
 
 (defmethod get-new-pc-from-jump 6 [pc
-                                   {:keys [instruction parameter-modes]}
+                                   {:keys [instruction param-modes]}
                                    params
                                    program]
   (if (zero? (get-param-value-with-mode
               (first params)
-              (first parameter-modes)
+              (first param-modes)
               program))
     (get-param-value-with-mode
      (second params)
-     (second parameter-modes)
+     (second param-modes)
      program)
     (+ pc
        (pc-change instruction))))
+
+(s/def :intcode/instruction #{1 2 3 4 5 6 7 8 99})
+(s/def :intcode/params (s/and
+                        #(= 3 (count %))
+                        (s/coll-of int?)))
+(s/def :intcode/param-modes (s/and
+                             #(= 3 (count %))
+                             (s/coll-of #{0 1})))
+(s/def :intcode/tick-instruction (s/keys :req [:intcode/instruction :intcode/params :intcode/param-modes]))
 
 (defn parse-intcode
   "Grab multi digit 'intcode'"
@@ -100,6 +109,15 @@
     (mapv #(get program %)
           (range pc (+ pc
                        (pc-change instruction))))))
+
+(defn parse-tick-instruction [computer]
+  (let [{:keys [intcode/pc intcode/memory]} computer
+        intcode                             (parse-intcode pc memory)
+        parsed-opcode                       (parse-opcode (first intcode))
+        {:keys [instruction param-modes]}   parsed-opcode]
+    #:intcode{:instruction instruction
+              :params      (into [] (drop 1 intcode))
+              :param-modes param-modes}))
 
 (defn output [n & _]
   (swap! program-output conj n))
@@ -148,36 +166,41 @@
 (defn current-opcode [{:keys [intcode/memory intcode/pc]}]
   (mod (get memory pc) 100))
 
-;; Create this crap to use a multimethod instead of a lookup table grab
-;; instruction and dispatch on it implement multimethods that will do the right
-;; thing with the right to the computer given the right computer.  That's the
-;; open-closed-principle.
-(defmethod execute-op-on-memory (fn [computer]))
-(def execute-op-on-memory [computer]
-  (let [op (get-op-fn instruction)
-        location (last params)
-        val (op
-             (get-param-value-with-mode (first params) (first parameter-modes) memory)
-             (get-param-value-with-mode (second params) (second parameter-modes) memory))]
-    (if (side-effect? instruction)
-      memory
-      (assoc memory location val))))
+(defn get-updated-pc [computer]
+  (let [{:keys [intcode/pc intcode/memory]} computer
+
+        intcode               (parse-intcode pc memory)
+        parsed-opcode         (parse-opcode (first intcode))
+        {:keys [instruction]} parsed-opcode]
+    (if (jump-instruction? instruction)
+      (get-new-pc-from-jump pc
+                            parsed-opcode
+                            (rest intcode)
+                            memory)
+      (+ pc (pc-change instruction)))))
 
 (defn tick-computer [computer]
-  (let [{:keys [intcode/pc intcode/memory]} computer
-        intcode (parse-intcode pc memory)
-        params (rest intcode)
-        parsed-opcode (parse-opcode (first intcode))
-        {:keys [instruction parameter-modes]} parsed-opcode]
-    (assoc computer
-           :intcode/pc (if (jump-instruction? instruction)
-                         (get-new-pc-from-jump pc
-                                               parsed-opcode
-                                               (rest intcode)
-                                               memory)
-                         (+ pc (pc-change instruction)))
-           :intcode/memory (execute-op-on-memory computer)
-           :intcode/memory)))
+  (assoc computer
+         :intcode/pc (get-updated-pc computer)
+         :intcode/memory (let [{:keys [intcode/pc intcode/memory]}   computer
+                               intcode                               (parse-intcode pc memory)
+                               params                                (rest intcode)
+                               parsed-opcode                         (parse-opcode (first intcode))
+                               {:keys [instruction param-modes]} parsed-opcode
+                               op                                    (get-op-fn instruction)
+                               location                              (last params)
+                               val                                   (op
+                                                                      (get-param-value-with-mode
+                                                                       (first params)
+                                                                       (first param-modes)
+                                                                       memory)
+                                                                      (get-param-value-with-mode
+                                                                       (second params)
+                                                                       (second param-modes)
+                                                                       memory))]
+                           (if (side-effect? instruction)
+                             memory
+                             (assoc memory location val)))))
 
 (defn run-computer [computer]
   (last (take-while
