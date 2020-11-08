@@ -1,9 +1,9 @@
 (ns aoc.intcode
-  (:require [aoc.utils :refer [parse-int]]
+  (:require [clojure.string :as str]
             [clojure.spec.alpha :as s]))
 
 (defn tokenize [input]
-  (mapv #(Integer/parseInt %) (clojure.string/split input #",")))
+  (mapv #(Integer/parseInt %) (str/split input #",")))
 
 (def exited? (atom false))
 (def program-output (atom []))
@@ -179,28 +179,31 @@
                             memory)
       (+ pc (pc-change instruction)))))
 
+(defn get-updated-memory [computer]
+  (let [{:keys [intcode/pc intcode/memory]} computer
+        intcode                             (parse-intcode pc memory)
+        params                              (rest intcode)
+        parsed-opcode                       (parse-opcode (first intcode))
+        {:keys [instruction param-modes]}   parsed-opcode
+        op                                  (get-op-fn instruction)
+        location                            (last params)
+        val                                 (op
+                                             (get-param-value-with-mode
+                                              (first params)
+                                              (first param-modes)
+                                              memory)
+                                             (get-param-value-with-mode
+                                              (second params)
+                                              (second param-modes)
+                                              memory))]
+    (if (side-effect? instruction)
+      memory
+      (assoc memory location val))))
+
 (defn tick-computer [computer]
   (assoc computer
          :intcode/pc (get-updated-pc computer)
-         :intcode/memory (let [{:keys [intcode/pc intcode/memory]}   computer
-                               intcode                               (parse-intcode pc memory)
-                               params                                (rest intcode)
-                               parsed-opcode                         (parse-opcode (first intcode))
-                               {:keys [instruction param-modes]} parsed-opcode
-                               op                                    (get-op-fn instruction)
-                               location                              (last params)
-                               val                                   (op
-                                                                      (get-param-value-with-mode
-                                                                       (first params)
-                                                                       (first param-modes)
-                                                                       memory)
-                                                                      (get-param-value-with-mode
-                                                                       (second params)
-                                                                       (second param-modes)
-                                                                       memory))]
-                           (if (side-effect? instruction)
-                             memory
-                             (assoc memory location val)))))
+         :intcode/memory (get-updated-memory computer)))
 
 (defn run-computer [computer]
   (last (take-while
