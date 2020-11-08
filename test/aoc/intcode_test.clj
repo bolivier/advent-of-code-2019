@@ -37,14 +37,6 @@
          (sut/create-computer "1,9,10,3,99" [10]))))
 
 (deftest run-computer-test
-  (testing "simple storage"
-    (let [final-computer (sut/run-computer
-                          (sut/create-computer "8,1,1,3,99"))]
-      (is (map? final-computer))
-      (is (:intcode/memory final-computer))
-      (is (= [8 1 1 1 99]
-             (:intcode/memory final-computer)))))
-
   (testing "addition (op code 1)"
     (let [computer (sut/run-computer
                     (sut/create-computer "1,1,1,2,99"))]

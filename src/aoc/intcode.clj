@@ -5,15 +5,6 @@
 (defn tokenize [input]
   (mapv #(Integer/parseInt %) (str/split input #",")))
 
-(def exited? (atom false))
-(def program-output (atom []))
-
-(defonce position-mode 0)
-(defonce immediate-mode 1)
-
-(defn exit [& _]
-  (reset! exited? true))
-
 (def pc-change {1 4
                 2 4
                 3 2
@@ -23,8 +14,6 @@
                 7 4
                 8 4
                 99 1})
-
-(def jump-instruction? #{5 6})
 
 (s/def ::opcode (s/and int? #(< 999 % 9999)))
 
@@ -48,9 +37,6 @@
 (s/fdef parse-opcode
   :args (s/cat :opcode ::opcode))
 
-;; This needs to be refactored to support variadic input.
-(def get-input (constantly 5))
-
 (s/def ::intcode (s/and (s/every int?)
                         #(< 0 (count %) 4)))
 
@@ -59,38 +45,6 @@
     (= 1 mode) param
     (= 0 mode) (get memory param)
     :else (throw (Exception. (str "Given bad values to get in program: " [param mode])))))
-
-(defmulti get-new-pc-from-jump (fn [_ {:keys [instruction]} _ _]
-                                 instruction))
-(defmethod get-new-pc-from-jump 5 [pc
-                                   {:keys [instruction param-modes]}
-                                   params
-                                   program]
-  (if (zero? (get-param-value-with-mode
-              (first params)
-              (first param-modes)
-              program))
-    (+ pc
-       (pc-change instruction))
-    (get-param-value-with-mode
-     (second params)
-     (second param-modes)
-     program)))
-
-(defmethod get-new-pc-from-jump 6 [pc
-                                   {:keys [instruction param-modes]}
-                                   params
-                                   program]
-  (if (zero? (get-param-value-with-mode
-              (first params)
-              (first param-modes)
-              program))
-    (get-param-value-with-mode
-     (second params)
-     (second param-modes)
-     program)
-    (+ pc
-       (pc-change instruction))))
 
 (s/def :intcode/instruction #{1 2 3 4 5 6 7 8 99})
 (s/def :intcode/params (s/and
@@ -110,7 +64,10 @@
           (range pc (+ pc
                        (pc-change instruction))))))
 
-(defn parse-tick-instruction [computer]
+(defn parse-tick-instruction
+  "Take an incode computer and extract info about the next instruction
+  to do."
+  [computer]
   (let [{:keys [intcode/pc intcode/memory]} computer
         intcode                             (parse-intcode pc memory)
         parsed-opcode                       (parse-opcode (first intcode))
@@ -119,39 +76,15 @@
               :params      (into [] (drop 1 intcode))
               :param-modes param-modes}))
 
-(defn output [n & _]
-  (swap! program-output conj n))
+(s/def :incode/output (s/coll-of int?))
+(s/def :incode/input (s/coll-of int?))
+(s/def :intcode/pc int?)
+(s/def :intcode/memory (s/coll-of int?))
+(s/def :intcode/computer (s/keys :req [:intcode/memory :intcode/pc :intcode/input :intcode/output]))
 
-(defn less-than [a b]
-  (if (< a b)
-    1
-    0))
-
-(defn equals [a b]
-  (if (= a b)
-    1
-    0))
-
-(defn no-op [& _]
-  nil)
-
-(defn get-op-fn [instruction]
-  (case instruction
-    99 exit
-    1 +
-    2 *
-    3 get-input
-    4 output
-
-    5 no-op
-    6 no-op
-
-    7 less-than
-    8 equals
-    #_(throw (Exception. (str "Used unsupported opcode: " instruction)))))
-
-(defn side-effect? [instruction]
-  (#{4 5 6 99} instruction))
+(s/fdef parse-tick-instruction
+  :args (s/cat :computer :intcode/computer)
+  :ret :intcode/tick-instruction)
 
 (s/def ::token int?)
 
@@ -166,47 +99,64 @@
 (defn current-opcode [{:keys [intcode/memory intcode/pc]}]
   (mod (get memory pc) 100))
 
-(defn get-updated-pc [computer]
-  (let [{:keys [intcode/pc intcode/memory]} computer
+(defmulti execute-instruction
+  (fn [computer]
+    (:intcode/instruction (parse-tick-instruction computer))))
 
-        intcode               (parse-intcode pc memory)
-        parsed-opcode         (parse-opcode (first intcode))
-        {:keys [instruction]} parsed-opcode]
-    (if (jump-instruction? instruction)
-      (get-new-pc-from-jump pc
-                            parsed-opcode
-                            (rest intcode)
-                            memory)
-      (+ pc (pc-change instruction)))))
+(defmethod execute-instruction 99 [computer]
+  (update computer :intcode/pc inc))
 
-(defn get-updated-memory [computer]
-  (let [{:keys [intcode/pc intcode/memory]} computer
-        intcode                             (parse-intcode pc memory)
-        params                              (rest intcode)
-        parsed-opcode                       (parse-opcode (first intcode))
-        {:keys [instruction param-modes]}   parsed-opcode
-        op                                  (get-op-fn instruction)
-        location                            (last params)
-        val                                 (op
-                                             (get-param-value-with-mode
-                                              (first params)
-                                              (first param-modes)
-                                              memory)
-                                             (get-param-value-with-mode
-                                              (second params)
-                                              (second param-modes)
-                                              memory))]
-    (if (side-effect? instruction)
-      memory
-      (assoc memory location val))))
+(defn execute-arithmetic-instruction [computer fn]
+  (let [instruction (parse-tick-instruction computer)
+        memory (:intcode/memory computer)
+        [param1 param2] (:intcode/params instruction)
+        [mode1 mode2] (:intcode/param-modes instruction)
+
+        arg1 (get-param-value-with-mode param1 mode1 memory)
+        arg2 (get-param-value-with-mode param2 mode2 memory)
+
+        memory-location (-> instruction :intcode/params (nth 2))
+
+        value (fn arg1 arg2)]
+    (-> computer
+        (assoc-in [:intcode/memory memory-location] value)
+        (update :intcode/pc (partial + 4)))))
+
+;; It might be helpful to extract some data constants from these methods to help
+;; define the instructions in data instead of in code.
+(defmethod execute-instruction 1 [computer]
+  (execute-arithmetic-instruction computer +))
+
+(defmethod execute-instruction 2 [computer]
+  (execute-arithmetic-instruction computer *))
+
+(defmethod execute-instruction 3 [computer]
+  (let [instruction (parse-tick-instruction computer)
+        input-val (first (:intcode/input computer))
+        memory-location (first (:intcode/params instruction))]
+    (-> computer
+        (assoc-in [:intcode/memory memory-location] input-val)
+        (update :intcode/input #(into [] (rest %)))
+        (update :intcode/pc (partial + 2)))))
+
+(defmethod execute-instruction 4 [computer]
+  (let [instruction (parse-tick-instruction computer)
+        memory-location (first (:intcode/params instruction))]
+    (-> computer
+        (update :intcode/output #(conj % (get-in computer [:intcode/memory memory-location])))
+        (update :intcode/pc (partial + 2)))))
 
 (defn tick-computer [computer]
-  (assoc computer
-         :intcode/pc (get-updated-pc computer)
-         :intcode/memory (get-updated-memory computer)))
+  (execute-instruction computer))
+
+(defn non-exit-instruction [computer]
+  (not= 99 (current-opcode computer)))
+
+(defn has-more-memory [computer]
+  (< (:intcode/pc computer) (count (:intcode/memory computer))))
 
 (defn run-computer [computer]
-  (last (take-while
-         #(and (< (:intcode/pc %) (count (:intcode/memory %)))
-               (not= 99 (current-opcode computer)))
-         (iterate tick-computer computer))))
+  (first
+   (drop-while
+    (every-pred non-exit-instruction has-more-memory)
+    (iterate tick-computer computer))))
