@@ -3,7 +3,14 @@
             [clojure.spec.alpha :as s]))
 
 (defn tokenize [input]
-  (mapv #(Integer/parseInt %) (str/split input #",")))
+  (let [cleaned-input (-> input
+                          (str/replace #"[ \n]+" "")
+                          (str/split
+                           #","))]
+    (mapv #(Integer/parseInt %) cleaned-input)))
+
+(defn serialize [memory]
+  (str/join "," memory))
 
 (def pc-change {:arithmetic 4
                 1 4
@@ -114,15 +121,31 @@
         (assoc-in [:intcode/memory memory-location] value)
         (update :intcode/pc (partial + (pc-change :arithmetic))))))
 
+(defn execute-comparison-instruction [computer f]
+  (let [instruction                     (parse-tick-instruction computer)
+        memory                          (:intcode/memory computer)
+        [param1 param2 memory-location] (:intcode/params instruction)
+        [mode1 mode2]                   (:intcode/param-modes instruction)
+
+        arg-1      (get-param-value-with-mode param1 mode1 memory)
+        arg-2      (get-param-value-with-mode param2 mode2 memory)
+        true? (f arg-1 arg-2)]
+
+    (-> computer
+        (update :intcode/pc (partial + 4))
+        (assoc-in [:intcode/memory memory-location] (if true?
+                                                      1
+                                                      0)))))
+
 (defmulti execute-instruction
   (fn [computer]
     (:intcode/instruction (parse-tick-instruction computer))))
 
 (defmethod execute-instruction 99 [computer]
   (update computer :intcode/pc inc))
-
 ;; It might be helpful to extract some data constants from these methods to help
 ;; define the instructions in data instead of in code.
+
 (defmethod execute-instruction 1 [computer]
   (execute-arithmetic-instruction computer +))
 
@@ -140,10 +163,37 @@
 
 (defmethod execute-instruction 4 [computer]
   (let [instruction (parse-tick-instruction computer)
-        memory-location (first (:intcode/params instruction))]
+        param (first (:intcode/params instruction))
+        mode (first (:intcode/param-modes instruction))
+        memory (:intcode/memory computer)
+
+        output-value (get-param-value-with-mode param
+                                                mode
+                                                memory)]
     (-> computer
-        (update :intcode/output #(conj % (get-in computer [:intcode/memory memory-location])))
+        (update :intcode/output #(conj % output-value))
         (update :intcode/pc (partial + (pc-change 4))))))
+
+(defn execute-jump-instruction [computer f]
+  (let [instruction (parse-tick-instruction computer)
+        [check-arg memory-location] (:intcode/params instruction)
+        [check-arg-mode] (:intcode/param-modes instruction)
+        jump? (f (get-param-value-with-mode check-arg check-arg-mode (:intcode/memory computer)))]
+    (update computer :intcode/pc (if jump?
+                                   (constantly memory-location)
+                                   (partial + 3)))))
+
+(defmethod execute-instruction 5 [computer]
+  (execute-jump-instruction computer (comp not zero?)))
+
+(defmethod execute-instruction 6 [computer]
+  (execute-jump-instruction computer zero?))
+
+(defmethod execute-instruction 7 [computer]
+  (execute-comparison-instruction computer <))
+
+(defmethod execute-instruction 8 [computer]
+  (execute-comparison-instruction computer =))
 
 (defn tick-computer [computer]
   (execute-instruction computer))

@@ -65,7 +65,112 @@
       (is (= [4 3 99 20]
              (:intcode/memory computer)))
       (is (= [20]
-             (:intcode/output computer))))))
+             (:intcode/output computer)))))
+
+  (testing "jump if true (op code 5)"
+    (let [input "5,1,5,4,1,4,0,99"
+          computer (sut/run-computer
+                    (sut/create-computer input))]
+      (is (= [5]
+             (:intcode/output computer))))
+
+    (let [input "105,0,6,4,1,99,4,0,99"
+          computer (sut/run-computer
+                    (sut/create-computer input))]
+      (is (= [0]
+             (:intcode/output computer))))
+
+    (let [input "5,7,6,104,1,99,4,0,99"
+          computer (sut/run-computer
+                    (sut/create-computer input))]
+      (is (= [1]
+             (:intcode/output computer)))))
+
+  (testing "jump if false (op code 6"
+    (let [input
+          "6,1,5,
+           4,1,
+           99,
+           4,0,
+           99"
+          computer (sut/run-computer
+                    (sut/create-computer input))]
+      (is (= [1]
+             (:intcode/output computer))))
+
+    (let [input
+          "106,0,6,
+           4,1,
+           99,
+           4,0,
+           99"
+          computer (sut/run-computer
+                    (sut/create-computer input))]
+      (is (= [106]
+             (:intcode/output computer))))
+
+    (let [input
+          "6,7,6,
+           104,1,
+           99,
+           4,0,
+           99"
+          computer (sut/run-computer
+                    (sut/create-computer input))]
+      (is (= [6]
+             (:intcode/output computer)))))
+
+  (testing "less than (op code 7)"
+    (let [input (sut/serialize
+                 [1107 1 2 5
+                  104 2
+                  99])]
+      (is (= [1]
+             (:intcode/output (sut/run-computer (sut/create-computer input))))))
+
+    (let [input (sut/serialize
+                 [7 7 8 5
+                  104 2
+                  99
+                  1 2])]
+      (is (= [1]
+             (:intcode/output (sut/run-computer (sut/create-computer input)))))))
+
+  (testing "less than (op code 8)"
+    (let [input (sut/serialize
+                 [1108 1 1 5
+                  104 2
+                  99])]
+      (is (= [1]
+             (:intcode/output (sut/run-computer (sut/create-computer input))))))
+
+    (let [input (sut/serialize
+                 [8 8 8 5
+                  104 2
+                  99
+                  1 1])]
+      (is (= [1]
+             (:intcode/output (sut/run-computer (sut/create-computer input)))))))
+
+  (testing "conditional op codes (5, 6, 7, 8)"
+    (let [input "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"
+
+          output-999 (sut/run-computer
+                      (sut/create-computer input [7]))
+
+          output-1000 (sut/run-computer
+                       (sut/create-computer input [8]))
+
+          output-1001 (sut/run-computer
+                       (sut/create-computer input [9]))]
+      (is (= [999]
+             (:intcode/output output-999)))
+
+      (is (= [1000]
+             (:intcode/output output-1000)))
+
+      (is (= [1001]
+             (:intcode/output output-1001))))))
 
 (deftest previous-solutions
   (testing "day 2"
